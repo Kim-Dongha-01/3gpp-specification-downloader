@@ -49,7 +49,7 @@ def ts_to_etsi(ts_number: str):
     series_range = f"{series_base}_{series_base + 99}"
     return etsi_num, series_range
 
-def get_versions(etsi_num, series_range, target_release=None):
+def get_latest_version(etsi_num, series_range, target_release=None):
     dir_url = f"https://www.etsi.org/deliver/etsi_ts/{series_range}/{etsi_num}/"
     try:
         resp = requests.get(dir_url, timeout=10)
@@ -78,12 +78,13 @@ def get_versions(etsi_num, series_range, target_release=None):
             return None, f"Rel-{target_release} 버전 없음"
         versions = filtered
 
-    return versions, None
+    # 최신 버전 하나만 반환
+    return versions[0], None
 
 def build_pdf_url(etsi_num, series_range, ver_dir):
-    ver_str = ver_dir.split("_")[0]           # '19.05.00'
-    ver_compact = ver_str.replace(".", "")     # '190500' (파일명용)
-    ver_display = ".".join(str(int(p)) for p in ver_str.split("."))  # '19.5.0'
+    ver_str = ver_dir.split("_")[0]                                          # '19.05.00'
+    ver_compact = ver_str.replace(".", "")                                    # '190500'
+    ver_display = ".".join(str(int(p)) for p in ver_str.split("."))          # '19.5.0'
     filename = f"ts_{etsi_num}v{ver_compact}p.pdf"
     url = f"https://www.etsi.org/deliver/etsi_ts/{series_range}/{etsi_num}/{ver_dir}/{filename}"
     return url, ver_str, ver_display
@@ -110,18 +111,21 @@ if run and ts_input.strip():
         for ts in ts_list:
             try:
                 etsi_num, series_range = ts_to_etsi(ts)
-                versions, err = get_versions(etsi_num, series_range, target_release)
-                st.session_state.results.append({
-                    "ts": ts, "etsi_num": etsi_num, "series_range": series_range,
-                    "versions": versions,
-                    "all_labels": [v.split("_")[0] for v in versions] if versions else [],
-                    "error": err,
-                })
+                ver_dir, err = get_latest_version(etsi_num, series_range, target_release)
+                if err:
+                    st.session_state.results.append({
+                        "ts": ts, "error": err,
+                        "etsi_num": None, "series_range": None, "ver_dir": None,
+                    })
+                else:
+                    st.session_state.results.append({
+                        "ts": ts, "error": None,
+                        "etsi_num": etsi_num, "series_range": series_range, "ver_dir": ver_dir,
+                    })
             except Exception as e:
                 st.session_state.results.append({
                     "ts": ts, "error": str(e),
-                    "versions": None, "all_labels": [],
-                    "etsi_num": None, "series_range": None,
+                    "etsi_num": None, "series_range": None, "ver_dir": None,
                 })
 elif run:
     st.warning("TS 번호를 입력해주세요.")
@@ -141,23 +145,14 @@ if st.session_state.results:
                 st.divider()
                 continue
 
-            versions     = item["versions"]
-            all_labels   = item["all_labels"]
-            etsi_num     = item["etsi_num"]
-            series_range = item["series_range"]
-
-            selected_label = st.selectbox(
-                f"버전 선택 (TS {ts})", all_labels,
-                key=f"ver_{ts}", label_visibility="collapsed"
+            pdf_url, ver_str, ver_display = build_pdf_url(
+                item["etsi_num"], item["series_range"], item["ver_dir"]
             )
-            selected_ver_dir = versions[all_labels.index(selected_label)]
-            pdf_url, ver_str, ver_display = build_pdf_url(etsi_num, series_range, selected_ver_dir)
             friendly_name = f"TS {ts} V{ver_display}.pdf"
             cache_key = f"{ts}_{ver_str}"
 
             st.success(f"✓ v{ver_display} 발견")
 
-            # 캐시에 있으면 바로 저장 버튼, 없으면 준비 버튼
             if cache_key in st.session_state.pdf_cache:
                 st.download_button(
                     label=f"💾 저장하기 — {friendly_name}",
@@ -181,7 +176,7 @@ with st.expander("💡 사용법"):
     st.markdown("""
 - **문서 번호**: `23.501` 형식으로 입력
 - **여러 문서**: 쉼표(`,`) 또는 줄바꿈으로 구분
-- **릴리즈 선택**: 특정 Release가 필요하면 드롭다운에서 선택
+- **릴리즈 선택**: 원하는 Release를 선택하면 해당 릴리즈의 최신 버전을 자동으로 찾습니다
 - **⬇️ 다운로드 준비** 클릭 → PDF 로딩 후 **💾 저장하기** 버튼 자동 표시
 - 저장 파일명은 `TS 24.501 V19.5.0.pdf` 형식으로 자동 지정됩니다
 """)
