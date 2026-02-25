@@ -82,9 +82,18 @@ def build_pdf_url(etsi_num, series_range, ver_dir):
     filename = f"ts_{etsi_num}v{ver_compact}p.pdf"
     return f"https://www.etsi.org/deliver/etsi_ts/{series_range}/{etsi_num}/{ver_dir}/{filename}", ver_str
 
+def fetch_pdf(pdf_url: str) -> bytes | None:
+    """ETSI 서버에서 PDF를 받아 bytes로 반환"""
+    try:
+        resp = requests.get(pdf_url, timeout=60, stream=True)
+        resp.raise_for_status()
+        return resp.content
+    except Exception as e:
+        st.error(f"PDF 다운로드 실패: {e}")
+        return None
+
 # ── 실행 ──────────────────────────────────────────────────
 if run and ts_input.strip():
-    # 입력 파싱
     raw = re.split(r"[,\n]+", ts_input)
     ts_list = [t.strip() for t in raw if re.match(r"^\d+\.\d+$", t.strip())]
 
@@ -96,9 +105,7 @@ if run and ts_input.strip():
 
         for ts in ts_list:
             with st.container():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.markdown(f"**TS {ts}**")
+                st.markdown(f"**TS {ts}**")
 
                 try:
                     etsi_num, series_range = ts_to_etsi(ts)
@@ -108,10 +115,7 @@ if run and ts_input.strip():
                         st.error(f"TS {ts}: {err}")
                         continue
 
-                    ver_dir = versions[0]
-                    pdf_url, ver_str = build_pdf_url(etsi_num, series_range, ver_dir)
-
-                    # 버전 선택 (해당 TS의 사용 가능 버전 드롭다운)
+                    # 버전 선택 드롭다운
                     all_labels = [v.split("_")[0] for v in versions]
                     selected_label = st.selectbox(
                         f"버전 선택 (TS {ts})",
@@ -123,7 +127,21 @@ if run and ts_input.strip():
                     pdf_url, ver_str = build_pdf_url(etsi_num, series_range, selected_ver_dir)
 
                     st.success(f"✓ v{ver_str} 발견")
-                    st.markdown(f"🔗 [PDF 열기 / 다운로드]({pdf_url})")
+
+                    # 다운로드 버튼 — 클릭 시 서버가 PDF를 받아 지정 파일명으로 전달
+                    friendly_name = f"TS {ts} V{ver_str}.pdf"
+
+                    if st.button(f"⬇️ 다운로드 ({friendly_name})", key=f"btn_{ts}_{ver_str}"):
+                        with st.spinner(f"{friendly_name} 다운로드 중..."):
+                            pdf_bytes = fetch_pdf(pdf_url)
+                        if pdf_bytes:
+                            st.download_button(
+                                label=f"💾 저장하기 — {friendly_name}",
+                                data=pdf_bytes,
+                                file_name=friendly_name,
+                                mime="application/pdf",
+                                key=f"dl_{ts}_{ver_str}",
+                            )
 
                 except Exception as e:
                     st.error(f"TS {ts} 처리 중 오류: {e}")
@@ -139,5 +157,6 @@ with st.expander("💡 사용법"):
 - **문서 번호**: `23.501` 형식으로 입력
 - **여러 문서**: 쉼표(`,`) 또는 줄바꿈으로 구분
 - **릴리즈 선택**: 특정 Release가 필요하면 드롭다운에서 선택
-- 결과에서 **PDF 열기** 링크를 클릭하면 브라우저에서 바로 열리거나 다운로드됩니다
+- **다운로드**: 버튼 클릭 → 서버가 PDF를 받아오면 💾 저장 버튼이 나타납니다
+- 저장 파일명은 `TS 24.501 V19.5.0.pdf` 형식으로 자동 지정됩니다
 """)
