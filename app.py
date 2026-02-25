@@ -81,10 +81,12 @@ def get_versions(etsi_num, series_range, target_release=None):
     return versions, None
 
 def build_pdf_url(etsi_num, series_range, ver_dir):
-    ver_str = ver_dir.split("_")[0]
-    ver_compact = ver_str.replace(".", "")
+    ver_str = ver_dir.split("_")[0]           # '19.05.00'
+    ver_compact = ver_str.replace(".", "")     # '190500' (파일명용)
+    ver_display = ".".join(str(int(p)) for p in ver_str.split("."))  # '19.5.0'
     filename = f"ts_{etsi_num}v{ver_compact}p.pdf"
-    return f"https://www.etsi.org/deliver/etsi_ts/{series_range}/{etsi_num}/{ver_dir}/{filename}", ver_str
+    url = f"https://www.etsi.org/deliver/etsi_ts/{series_range}/{etsi_num}/{ver_dir}/{filename}"
+    return url, ver_str, ver_display
 
 def fetch_pdf(pdf_url):
     try:
@@ -149,11 +151,11 @@ if st.session_state.results:
                 key=f"ver_{ts}", label_visibility="collapsed"
             )
             selected_ver_dir = versions[all_labels.index(selected_label)]
-            pdf_url, ver_str = build_pdf_url(etsi_num, series_range, selected_ver_dir)
-            friendly_name = f"TS {ts} V{ver_str}.pdf"
+            pdf_url, ver_str, ver_display = build_pdf_url(etsi_num, series_range, selected_ver_dir)
+            friendly_name = f"TS {ts} V{ver_display}.pdf"
             cache_key = f"{ts}_{ver_str}"
 
-            st.success(f"✓ v{ver_str} 발견")
+            st.success(f"✓ v{ver_display} 발견")
 
             # 캐시에 있으면 바로 저장 버튼, 없으면 준비 버튼
             if cache_key in st.session_state.pdf_cache:
