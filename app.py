@@ -40,11 +40,22 @@ run = st.button("⬇️ 문서 찾기 & 다운로드", type="primary", use_conta
 
 # ── 유틸 함수 ──────────────────────────────────────────────
 def ts_to_etsi(ts_number: str):
-    parts = ts_number.strip().split(".")
-    series = int(parts[0])
-    num = int(parts[1])
-    etsi_num = f"{series + 100}{num:03d}"
-    series_base = (int(etsi_num) // 100) * 100
+    # 하이픈 처리: '38.101-1' → series=38, num=101, sub=1
+    # 일반:        '38.401'   → series=38, num=401, sub=None
+    m = re.match(r"^(\d+)\.(\d+)(?:-(\d+))?$", ts_number.strip())
+    if not m:
+        raise ValueError(f"올바르지 않은 TS 번호 형식: {ts_number}")
+    series = int(m.group(1))
+    num    = int(m.group(2))
+    sub    = m.group(3)
+
+    base = f"{series + 100}{num:03d}"
+    if sub:
+        etsi_num = f"{base}{int(sub):02d}"
+    else:
+        etsi_num = base
+
+    series_base  = (int(base) // 100) * 100
     series_range = f"{series_base}_{series_base + 99}"
     return etsi_num, series_range
 
@@ -109,7 +120,7 @@ def fetch_one(ts, target_release):
 # ── 문서 찾기 & 다운로드 ───────────────────────────────────
 if run and ts_input.strip():
     raw = re.split(r"[,\n]+", ts_input)
-    ts_list = [t.strip() for t in raw if re.match(r"^\d+\.\d+$", t.strip())]
+    ts_list = [t.strip() for t in raw if re.match(r"^\d+\.\d+(?:-\d+)?$", t.strip())]
 
     if not ts_list:
         st.error("올바른 TS 번호를 입력해주세요. (예: 23.501)")
